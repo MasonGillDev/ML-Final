@@ -49,7 +49,7 @@ for n_components in pca_components_list:
     pca = PCA(n_components=min(n_components, X_scaled.shape[1]))
     X_pca = pca.fit_transform(X_scaled)
 
-    # Perform KMeans clustering
+    # Perform KMeans clustering - edit clusters
     kmeans = KMeans(n_clusters=10, random_state=42, n_init=10)
     cluster_labels = kmeans.fit_predict(X_pca)
 
@@ -110,17 +110,17 @@ plt.tight_layout()
 plt.savefig("titanic_pca_clustering_metrics.png", dpi=300)
 print("PCA clustering plots saved to 'titanic_pca_clustering_metrics.png'")
 
-# Normalize metrics for comparison
+# Normalize metrics for comparison - same as kmeans
 normalized_results = results_df.copy()
 for metric in metrics:
     min_val = normalized_results[metric].min()
     max_val = normalized_results[metric].max()
-    if metric == 'DBI':
+    if metric == 'DBI': # lower is better
         normalized_results[metric] = 1 - ((normalized_results[metric] - min_val) / (max_val - min_val))
     else:
         normalized_results[metric] = (normalized_results[metric] - min_val) / (max_val - min_val)
 
-# Print best PCA component count for each metric
+# Print best PCA component count for each metric - same as kmeans just changed for PCA
 print("\nBest PCA n_components for each metric:")
 for metric in metrics:
     best_idx = results_df[metric].idxmin() if metric == 'DBI' else results_df[metric].idxmax()
