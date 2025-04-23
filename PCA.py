@@ -8,77 +8,124 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 from sklearn.metrics import adjusted_rand_score, rand_score, mutual_info_score, normalized_mutual_info_score
 
-# Load Titanic data / remove columns with many missing values
+# Load Titanic dataset
 df = pd.read_excel('titanic3.xls')
-df.drop(['name', 'age', 'cabin', 'boat', 'body', 'home.dest'], axis=1, inplace=True)
-df.dropna(inplace=True)
+
+# Drop features with a lot of missing values
+df.drop(['age', 'name', 'cabin', 'boat', 'body', 'home.dest'], axis=1, inplace=True)
+df.dropna(inplace=True)  # Drop rows with any missing values
+
+# Encode categorical variables as dummy variables
 df_encoded = pd.get_dummies(df, drop_first=True)
 
+# Separate features and target
 X = df_encoded.drop('survived', axis=1)
 y = df_encoded['survived']
 
-# STEP 1: Standardize the features (mean = 0, std = 1)
-# Important because PCA is affected by feature scales
+# Scale the entire dataset before applying PCA
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# STEP 2: Apply PCA to reduce dimensionality
-# PCA identifies the directions *PC, that maximize variances
-# n_components=2 turns the dataset to 2 dimensions
-pca = PCA(n_components=2)
-X_pca = pca.fit_transform(X_scaled)
+# Define the range of PCA components to test
+pca_components_list = [2, 5, 10, 50, 100, 500, X.shape[1]]
 
-# STEP 3: Apply KMeans clustering on PCA data
-kmeans = KMeans(n_clusters=2, random_state=42, n_init=10, )
-cluster_labels = kmeans.fit_predict(X_pca)
+# Dictionary to store metrics for each PCA configuration
+results = {
+    'n_components': [],
+    'Silhouette': [],
+    'CH': [],
+    'DBI': [],
+    'RI': [],
+    'ARI': [],
+    'MI': [],
+    'NMI': []
+}
 
-if adjusted_rand_score(y, cluster_labels) < 0:
-    cluster_labels = 1 - cluster_labels
+# Loop over different PCA component settings
+for n_components in pca_components_list:
+    print(f"Processing PCA with {n_components} components...")
 
-# STEP 4: Eval clustering performance
-silhouette = silhouette_score(X_pca, cluster_labels)
-ch_score = calinski_harabasz_score(X_pca, cluster_labels)
-db_score = davies_bouldin_score(X_pca, cluster_labels)
-ri = rand_score(y, cluster_labels)
-ari = adjusted_rand_score(y, cluster_labels)
-mi = mutual_info_score(y, cluster_labels)
-nmi = normalized_mutual_info_score(y, cluster_labels)
+    # Apply PCA
+    pca = PCA(n_components=min(n_components, X_scaled.shape[1]))
+    X_pca = pca.fit_transform(X_scaled)
 
-# Clustering evaluation metrics
-print("Clustering Evaluation Metrics:\n")
-print(f"Silhouette Score:           {silhouette:.4f}")
-print(f"Calinski-Harabasz Score:    {ch_score:.2f}") 
-print(f"Davies-Bouldin Index:       {db_score:.4f}")  # Lower is better
+    # Perform KMeans clustering
+    kmeans = KMeans(n_clusters=10, random_state=42, n_init=10)
+    cluster_labels = kmeans.fit_predict(X_pca)
 
-# Visualize variance each principal component explains
-plt.figure(figsize=(10, 6))
-plt.plot(range(1, len(pca.explained_variance_ratio_) + 1), np.cumsum(pca.explained_variance_ratio_), marker='o', color='b')
-plt.title('Cumulative Explained Variance vs. Number of Principal Components')
-plt.xlabel('Number of Principal Components')
-plt.ylabel('Cumulative Explained Variance')
-plt.grid(True)
-plt.show()
+    # Flip cluster labels if they are reversed
+    if adjusted_rand_score(y, cluster_labels) < 0:
+        cluster_labels = 1 - cluster_labels
 
-# Visualize the KMeans clusters in PCA-space
-plt.figure(figsize=(10, 6))
-label_names = {0: "Not Survived", 1: "Survived"}
-colors = ['red', 'green']
+    # Compute evaluation metrics
+    silhouette = silhouette_score(X_pca, cluster_labels)
+    ch_score = calinski_harabasz_score(X_pca, cluster_labels)
+    db_score = davies_bouldin_score(X_pca, cluster_labels)
+    ri = rand_score(y, cluster_labels)
+    ari = adjusted_rand_score(y, cluster_labels)
+    mi = mutual_info_score(y, cluster_labels)
+    nmi = normalized_mutual_info_score(y, cluster_labels)
 
-for label in np.unique(cluster_labels):
-    plt.scatter(
-        X_pca[cluster_labels == label, 0],
-        X_pca[cluster_labels == label, 1],
-        label=label_names[label],
-        alpha=0.6,
-        s=60,
-        edgecolor='k',
-        c=colors[label]
-    )
+    # Store results
+    results['n_components'].append(n_components)
+    results['Silhouette'].append(silhouette)
+    results['CH'].append(ch_score)
+    results['DBI'].append(db_score)
+    results['RI'].append(ri)
+    results['ARI'].append(ari)
+    results['MI'].append(mi)
+    results['NMI'].append(nmi)
 
-plt.title('KMeans Clustering on PCA Components')
-plt.xlabel('PCA Component 1')
-plt.ylabel('PCA Component 2')
-plt.legend()
-plt.grid(True)
+# Convert results to DataFrame
+results_df = pd.DataFrame(results)
+
+# Save results
+results_df.to_excel("titanic_pca_kmeans_results.xlsx", index=False)
+print("PCA Results saved to 'titanic_pca_kmeans_results.xlsx'")
+
+# Plotting results
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette("plasma")
+fig, axes = plt.subplots(3, 3, figsize=(18, 15))
+axes = axes.flatten()
+
+metrics = ['Silhouette', 'CH', 'DBI', 'RI', 'ARI', 'MI', 'NMI']
+titles = ['Silhouette Score', 'Calinski-Harabasz Score', 'Davies-Bouldin Index',
+          'Rand Index', 'Adjusted Rand Index', 'Mutual Information', 'Normalized Mutual Information']
+
+for i, (metric, title) in enumerate(zip(metrics, titles)):
+    ax = axes[i]
+    ax.plot(results['n_components'], results[metric], marker='o', linewidth=2)
+    ax.set_title(title, fontsize=14)
+    ax.set_xlabel('PCA Components', fontsize=12)
+    ax.set_ylabel('Score', fontsize=12)
+    for x, y_val in zip(results['n_components'], results[metric]):
+        ax.annotate(f'{y_val:.3f}', (x, y_val), textcoords="offset points", xytext=(0, 10), ha='center')
+    ax.grid(True)
+
+if len(metrics) < len(axes):
+    fig.delaxes(axes[-1])
+
 plt.tight_layout()
-plt.show()
+plt.savefig("titanic_pca_clustering_metrics.png", dpi=300)
+print("PCA clustering plots saved to 'titanic_pca_clustering_metrics.png'")
+
+# Normalize metrics for comparison
+normalized_results = results_df.copy()
+for metric in metrics:
+    min_val = normalized_results[metric].min()
+    max_val = normalized_results[metric].max()
+    if metric == 'DBI':
+        normalized_results[metric] = 1 - ((normalized_results[metric] - min_val) / (max_val - min_val))
+    else:
+        normalized_results[metric] = (normalized_results[metric] - min_val) / (max_val - min_val)
+
+# Print best PCA component count for each metric
+print("\nBest PCA n_components for each metric:")
+for metric in metrics:
+    best_idx = results_df[metric].idxmin() if metric == 'DBI' else results_df[metric].idxmax()
+    print(f"{metric}: {results_df.loc[best_idx, 'n_components']}")
+
+# Print all results
+print("\nPCA Clustering Results:")
+print(results_df.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
