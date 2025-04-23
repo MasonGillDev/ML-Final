@@ -29,7 +29,7 @@ pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_scaled)
 
 # STEP 3: Apply KMeans clustering on PCA data
-kmeans = KMeans(n_clusters=2, _init=10, )
+kmeans = KMeans(n_clusters=2, random_state=42, n_init=10, )
 cluster_labels = kmeans.fit_predict(X_pca)
 
 if adjusted_rand_score(y, cluster_labels) < 0:
